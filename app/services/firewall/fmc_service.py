@@ -120,19 +120,33 @@ class FmcProvider(BaseFirewallProvider):
 
     async def normalize_rules_for_ai(self, raw_rules: List[Dict[str, Any]]) -> str:
         """
-        Convert complex FMC JSON into a human-readable text block for AI analysis.
-        Removes metadata noise to focus on logic.
+        Convert FMC JSON into a structured text block for AI analysis.
+        Includes more rule parameters to leverage the 128k context window.
         """
         output = []
         for r in raw_rules:
             name = r.get('name', 'Unnamed')
             action = r.get('action', 'Allow')
+            enabled = r.get('enabled', True)
+            log_begin = r.get('logBegin', False)
+            log_end = r.get('logEnd', False)
             
             src_nets = [n.get('name') for n in r.get('sourceNetworks', {}).get('objects', [])]
             dst_nets = [n.get('name') for n in r.get('destinationNetworks', {}).get('objects', [])]
             dst_ports = [p.get('name') for p in r.get('destinationPorts', {}).get('objects', [])]
             
-            rule_str = f"Rule: {name} | Action: {action} | From: {src_nets or 'Any'} | To: {dst_nets or 'Any'} | Ports: {dst_ports or 'Any'}"
+            ips_policy = r.get('ipsPolicy', {}).get('name', 'None')
+            file_policy = r.get('filePolicy', {}).get('name', 'None')
+            
+            rule_str = (
+                f"Rule: {name} (Enabled: {enabled})\n"
+                f"  Action: {action}\n"
+                f"  Source: {src_nets or 'Any'}\n"
+                f"  Destination: {dst_nets or 'Any'}\n"
+                f"  Ports: {dst_ports or 'Any'}\n"
+                f"  Logging: Begin={log_begin}, End={log_end}\n"
+                f"  Inspection: IPS={ips_policy}, File={file_policy}\n"
+            )
             output.append(rule_str)
             
         return "\n".join(output)

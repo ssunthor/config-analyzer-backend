@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     CHUNK_SIZE: int = 100000
     PORT: int = 8010
     HOST: str = "0.0.0.0"
+    VERIFY_SSL: bool = False
 
     class Config:
         env_file = ".env"

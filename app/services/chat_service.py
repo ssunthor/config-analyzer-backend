@@ -1,7 +1,10 @@
 import json
+import logging
 from typing import Dict, AsyncGenerator, List
 from app.services import vllm_service
 from app.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 SYSTEM_PROMPT = """### ROLE:
 You are a highly skilled Network Security Expert and Firewall Audit Assistant. 
@@ -51,7 +54,7 @@ If the message does not explicitly violate the DENY rules, default to ALLOWED.
 Output ONLY the word ALLOWED or DENIED."""
 
     payload = {
-        "model": settings.MODEL_NAME,
+        "model": settings.VLLM_MODEL,
         "messages": [
             {"role": "system", "content": guardrail_prompt},
             {"role": "user", "content": message}
@@ -63,12 +66,13 @@ Output ONLY the word ALLOWED or DENIED."""
     try:
         response = await vllm_service.call_vllm_api(payload)
         content = response.get("choices", [{}])[0].get("message", {}).get("content", "").strip().upper()
+        logger.debug(f"Guardrail verdict: {content!r}")
         if "DENIED" in content:
             return False
         return True
     except Exception as e:
-        print(f"Guardrail evaluation failed: {e}")
-        return True # Fallback to allowing it through if the check fails
+        logger.error(f"Guardrail evaluation failed: {e}")
+        return True  # Fallback to allowing it through if the check fails
 
 def get_context_description(context: Dict) -> str:
     active_tab = context.get("active_tab", "analyzer")
@@ -89,9 +93,12 @@ async def stream_chat_response(message: str, context: Dict) -> AsyncGenerator[st
     # 1. RUN INPUT GUARDRAIL PRE-CHECK
     is_allowed = await check_intent_guardrail(message, context_desc)
     if not is_allowed:
+        logger.info(f"Guardrail blocked message in context '{context_desc}'")
         error_msg = "⛔ **Request Denied by Security Guardrail.**\n\nI am exclusively a Network Security Audit Engine. I cannot fulfill requests involving general programming (like C++, Python, or FastAPI), out-of-scope trivia, or malicious actions."
         yield f"data: {json.dumps({'content': error_msg})}\n\n"
         return
+
+    logger.debug(f"Guardrail passed — building chat payload (context='{context_desc}')")
 
     # 2. PROCEED WITH MAIN AI PIPELINE
     config_content = context.get("config_content", "")
@@ -165,17 +172,19 @@ Snippet: {selected_issue.get('originalCode')}
     final_messages.extend(valid_alternating_messages)
 
     payload = {
-        "model": settings.MODEL_NAME,
+        "model": settings.VLLM_MODEL,
         "messages": final_messages,
         "temperature": 0.2,
         "max_tokens": 1024
     }
 
+    logger.debug(f"Starting SSE stream: messages={len(final_messages)}")
     try:
         async for chunk in vllm_service.stream_vllm_api(payload):
             data = {"content": chunk}
             yield f"data: {json.dumps(data)}\n\n"
+        logger.debug("SSE stream complete")
     except Exception as e:
-        print(f"Streaming error: {e}")
+        logger.error(f"SSE stream error: {e}")
         error_data = {"content": f"⚠️ **AI Stream Error**: {str(e)}. Please refresh or try again."}
         yield f"data: {json.dumps(error_data)}\n\n"

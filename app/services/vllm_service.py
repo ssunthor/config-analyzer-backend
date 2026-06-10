@@ -1,75 +1,126 @@
-import httpx
 import asyncio
-import json
-from typing import Dict, Optional
+import logging
+from typing import AsyncGenerator, Dict
+
 from app.core.config import settings
+from app.services.llm_interface import vLLMClient
+
+logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Singleton vLLMClient — built at import time; fails fast if Keycloak is
+# not configured (Keycloak-only auth, no static token fallback).
+# ---------------------------------------------------------------------------
+
+def _build_client() -> vLLMClient:
+    missing = [v for v in ("LLM_AUTH_URL", "LLM_CLIENT_ID", "LLM_CLIENT_SECRET")
+               if not getattr(settings, v)]
+    if missing:
+        raise ValueError(
+            f"Keycloak auth is required but these env vars are not set: {', '.join(missing)}"
+        )
+
+    logger.info(
+        f"Building vLLMClient: endpoint={settings.VLLM_ENDPOINT} model={settings.VLLM_MODEL} "
+        f"auth_url={settings.LLM_AUTH_URL} client_id={settings.LLM_CLIENT_ID} "
+        f"timeout={settings.LLM_CHAT_TIMEOUT}s ssl_verify={settings.LLM_SSL_VERIFY}"
+    )
+
+    llm_config = {
+        "model": settings.VLLM_MODEL,
+        "api_url": settings.VLLM_ENDPOINT,
+        "chat_timeout_seconds": settings.LLM_CHAT_TIMEOUT,
+        "num_ctx": settings.LLM_NUM_CTX,
+        "ssl_verify": settings.LLM_SSL_VERIFY,
+        "enable_thinking": settings.LLM_ENABLE_THINKING,
+    }
+    auth_cfg = {
+        "auth_url": settings.LLM_AUTH_URL,
+        "client_id": settings.LLM_CLIENT_ID,
+        "client_secret": settings.LLM_CLIENT_SECRET,
+    }
+    client = vLLMClient(config=llm_config, auth_cfg=auth_cfg)
+    logger.info("vLLMClient singleton created successfully")
+    return client
+
+
+_client = _build_client()
+
+
+# ---------------------------------------------------------------------------
+# Async wrappers — preserve the call signatures expected by analysis_service,
+# chat_service, and translation_service.
+# ---------------------------------------------------------------------------
+
+async def call_vllm_api(payload: Dict) -> Dict:
+    """
+    Non-streaming LLM call. Runs the sync vLLMClient in a thread executor so
+    the event loop is never blocked. Returns a dict shaped like the raw vLLM
+    response: {"choices": [{"message": {"role": ..., "content": ...}}]}.
+    """
+    messages = payload.get("messages", [])
+    temperature = payload.get("temperature", 0.2)
+    max_tokens = payload.get("max_tokens")
+    json_mode = payload.get("response_format", {}).get("type") == "json_object"
+
+    logger.debug(
+        f"call_vllm_api: messages={len(messages)} temperature={temperature} "
+        f"max_tokens={max_tokens} json_mode={json_mode}"
+    )
+
+    loop = asyncio.get_event_loop()
+    message = await loop.run_in_executor(
+        None,
+        lambda: _client.get_chat_completion(
+            messages, temperature, json_mode, max_tokens=max_tokens
+        ),
+    )
+    if message is None:
+        logger.error("call_vllm_api: vLLM returned no response after all retries")
+        raise RuntimeError("vLLM API returned no response after all retries")
+
+    logger.debug(
+        f"call_vllm_api: success — role={message.get('role')} "
+        f"content_len={len(message.get('content', ''))} chars"
+    )
+    return {"choices": [{"message": message}]}
+
+
+async def stream_vllm_api(payload: Dict) -> AsyncGenerator[str, None]:
+    """
+    Streaming LLM call. Yields raw content chunks (strings) for SSE delivery.
+    """
+    messages = payload.get("messages", [])
+    temperature = payload.get("temperature", 0.2)
+    max_tokens = payload.get("max_tokens")
+
+    logger.debug(
+        f"stream_vllm_api: messages={len(messages)} temperature={temperature} "
+        f"max_tokens={max_tokens}"
+    )
+
+    chunk_count = 0
+    async for chunk in _client.get_chat_completion_stream(messages, temperature, max_tokens=max_tokens):
+        chunk_count += 1
+        yield chunk
+
+    logger.debug(f"stream_vllm_api: stream finished — {chunk_count} chunks yielded")
+
 
 async def check_vllm_health() -> bool:
     """
-    Quickly checks if the vLLM server is responsive.
+    Sends a 1-token ping through the authenticated client to verify the
+    vLLM endpoint is reachable.
     """
-    url = f"{settings.VLLM_HOST}/vllm-gemma3-27b/v1/chat/completions"
-    payload = {
-        "model": settings.MODEL_NAME,
-        "messages": [{"role": "user", "content": "ping"}],
-        "max_tokens": 1,
-    }
+    logger.debug(f"Health check: pinging {settings.VLLM_ENDPOINT}")
     try:
-        async with httpx.AsyncClient(timeout=5.0, verify=False) as c:
-            response = await c.post(url, json=payload)
-            response.raise_for_status()
-            return True
+        result = await call_vllm_api({
+            "model": settings.VLLM_MODEL,
+            "messages": [{"role": "user", "content": "ping"}],
+            "max_tokens": 1,
+        })
+        logger.info("Health check: vLLM endpoint is online")
+        return result is not None
     except Exception as e:
-        print(f"Health check failed: {e}")
+        logger.warning(f"Health check: vLLM endpoint offline — {e}")
         return False
-
-async def call_vllm_api(payload: Dict, client: Optional[httpx.AsyncClient] = None) -> Dict:
-    """
-    Generic helper to call the vLLM API with retry logic.
-    """
-    url = f"{settings.VLLM_HOST}/vllm-gemma3-27b/v1/chat/completions"
-    
-    async def _make_request(c: httpx.AsyncClient) -> Dict:
-        for attempt in range(1, 4):
-            try:
-                response = await c.post(url, json=payload)
-                response.raise_for_status()
-                return response.json()
-            except httpx.HTTPStatusError as e:
-                if e.response.status_code == 504 and attempt < 3:
-                    print(f"Attempt {attempt} failed with 504, retrying...")
-                    await asyncio.sleep(2)
-                    continue
-                raise e
-        raise httpx.TimeoutException("All retries failed.")
-
-    if client:
-        return await _make_request(client)
-    else:
-        async with httpx.AsyncClient(timeout=300.0, verify=False) as c:
-            return await _make_request(c)
-
-async def stream_vllm_api(payload: Dict):
-    """
-    Helper to call the vLLM API with streaming enabled.
-    Yields content chunks.
-    """
-    url = f"{settings.VLLM_HOST}/vllm-gemma3-27b/v1/chat/completions"
-    payload["stream"] = True
-
-    async with httpx.AsyncClient(timeout=300.0, verify=False) as client:
-        async with client.stream("POST", url, json=payload) as response:
-            response.raise_for_status()
-            async for line in response.aiter_lines():
-                if line.startswith("data: "):
-                    line = line[6:]
-                    if line == "[DONE]":
-                        break
-                    try:
-                        data = json.loads(line)
-                        if "choices" in data and len(data["choices"]) > 0:
-                            content = data["choices"][0].get("delta", {}).get("content", "")
-                            if content:
-                                yield content
-                    except json.JSONDecodeError:
-                        continue

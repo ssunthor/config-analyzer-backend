@@ -185,8 +185,14 @@ class vLLMClient:
                 return None
             except RequestException as e:
                 body = ""
+                status = None
                 if getattr(e, 'response', None) is not None:
                     body = f" | response: {e.response.text[:500]}"
+                    status = e.response.status_code
+                # 4xx (except 429) is deterministic — retrying won't help.
+                if status is not None and 400 <= status < 500 and status != 429:
+                    logger.error(f"vLLM request rejected (not retrying): {e}{body}")
+                    return None
                 if attempt < max_retries:
                     sleep_time = 2 ** attempt
                     logger.warning(

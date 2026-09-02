@@ -136,13 +136,16 @@ frontend's **Config Translator** tab.
 | `file` | file upload (single `UploadFile`) | yes | Source configuration. UTF-8 with latin-1 fallback. |
 | `target_vendor` | form string | yes | Desired target vendor. |
 
-> Implementation note: `target_vendor` is accepted and passed to the prompt formatter,
-> but the current prompt template (`app/prompts/translation_prompts.py`) is hardcoded
-> for **Cisco ASA → Juniper Junos (SRX) `set` commands** and does not interpolate
-> `target_vendor`. Other targets will still produce Junos output until the prompt is
-> generalized.
+> Vendor-specific syntax guidance is injected per target via
+> `translation_prompts.VENDOR_RULES` (matched case-insensitively by substring);
+> currently only Juniper has tuned rules — other targets get the generic template.
 
-LLM call parameters: `temperature=0.1`, `max_tokens=8192`.
+Processing: input that fits the model context window (roughly half the window in
+characters, since the translated output is about as large as the source) is translated
+in a single call. Larger files are split at top-level config-section boundaries,
+translated concurrently (`CONCURRENT_REQUESTS` at a time), and the translated parts are
+concatenated in source order. LLM call parameters: `temperature=0.1`; `max_tokens` is
+sized dynamically to the context space remaining after the prompt (floor 8192).
 
 **Response `200` — success:**
 

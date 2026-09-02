@@ -12,9 +12,9 @@ from app.utils.text_processing import split_concatenated_files, chunk_config_tex
 logger = logging.getLogger(__name__)
 
 ANALYSIS_MAX_TOKENS = 8192
-# Conservative chars-per-token for config text (dense punctuation tokenizes
-# poorly), plus headroom for the prompt template and chunk preamble.
-CHARS_PER_TOKEN = 3
+# Deliberately high token estimate (2.5 chars/token): base64 blobs and dense
+# config text tokenize at ~3 chars/token, and a miss is a hard 400 from vLLM.
+# Plus headroom for the prompt template and chunk preamble.
 PROMPT_OVERHEAD_TOKENS = 2000
 
 
@@ -24,7 +24,7 @@ def _max_input_chars() -> int:
     if settings.CHUNK_SIZE > 0:
         return settings.CHUNK_SIZE
     budget_tokens = settings.LLM_NUM_CTX - ANALYSIS_MAX_TOKENS - PROMPT_OVERHEAD_TOKENS
-    return max(budget_tokens, 1000) * CHARS_PER_TOKEN
+    return max(budget_tokens, 1000) * 5 // 2
 
 
 def _parse_llm_json(raw: str):

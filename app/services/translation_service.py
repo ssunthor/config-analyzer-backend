@@ -14,6 +14,7 @@ async def translate_configuration_file(file_content: str, target_vendor: str) ->
     logger.info(f"Starting translation: target_vendor={target_vendor} input_len={len(file_content)} chars")
     prompt = translation_prompts.TRANSLATE_CONFIG_PROMPT.format(
         target_vendor=target_vendor,
+        vendor_specific_rules=translation_prompts.get_vendor_rules(target_vendor),
         source_config=file_content
     )
     payload = {

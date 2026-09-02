@@ -17,8 +17,8 @@ assistant, and live rule ingestion from Cisco Firepower Management Center (FMC).
 ## Endpoint summary
 
 | Method | Path | Purpose |
-|--------|------|---------|
-| GET  | `/v1/health` | Service liveness + upstream vLLM reachability |
+| --- | --- | --- |
+| GET | `/v1/health` | Service liveness + upstream vLLM reachability |
 | POST | `/v1/configs/analyze` | AI security analysis of uploaded config files |
 | POST | `/v1/configs/translate` | AI cross-vendor translation of a config file |
 | POST | `/v1/chat/stream` | SSE streaming network-security chat assistant |
@@ -60,7 +60,7 @@ framework. Powers the frontend's **Config Analyzer** tab.
 **Request:** `multipart/form-data`
 
 | Field | Type | Required | Notes |
-|-------|------|----------|-------|
+| --- | --- | --- | --- |
 | `files` | file upload, repeatable (`List[UploadFile]`) | yes | One or more raw config files. Decoded as UTF-8 with latin-1 fallback. |
 | `framework` | form string | no (default `"Default Best Practices"`) | Analysis framework name interpolated into the LLM prompt (e.g. CIS, NIST). |
 
@@ -112,6 +112,7 @@ callers should parse defensively.
 ```
 
 **Error responses:**
+
 - `400` — `{"detail": "No files provided"}` (empty file list)
 - `422` — FastAPI validation error when the `files` part is missing entirely
 
@@ -125,7 +126,7 @@ frontend's **Config Translator** tab.
 **Request:** `multipart/form-data`
 
 | Field | Type | Required | Notes |
-|-------|------|----------|-------|
+| --- | --- | --- | --- |
 | `file` | file upload (single `UploadFile`) | yes | Source configuration. UTF-8 with latin-1 fallback. |
 | `target_vendor` | form string | yes | Desired target vendor. |
 
@@ -153,6 +154,7 @@ LLM call parameters: `temperature=0.1`, `max_tokens=8192`.
 ```
 
 **Error responses:**
+
 - `422` — validation error when `file` or `target_vendor` is missing
 
 ---
@@ -193,7 +195,7 @@ emit network-device CLI (never general programming code).
 ```
 
 | Field | Type | Required | Notes |
-|-------|------|----------|-------|
+| --- | --- | --- | --- |
 | `message` | string | yes | The user's chat message. |
 | `context` | object | no (default `{}`) | Free-form dict; recognized keys below. |
 | `context.active_tab` | string | no | `"analyzer"`, `"translate"`, or `"greenfield"` — selects the context description given to the model. Anything else → generic "browsing the dashboard". |
@@ -245,7 +247,7 @@ today; Fortinet/Juniper are stubbed out in `app/services/factory.py`.
 **Shared request body** (`application/json`):
 
 | Field | Type | Required | Notes |
-|-------|------|----------|-------|
+| --- | --- | --- | --- |
 | `vendor` | string | yes | Provider selector, case-insensitive. Currently only `"cisco"`. |
 | `host` | string | yes | FMC hostname or URL. `https://` is prefixed automatically if no scheme is given. |
 | `username` | string | yes | FMC API username (sent per-request; never stored). |
@@ -358,7 +360,7 @@ domain UUID from the `DOMAIN_UUID` header. Subsequent calls send the token in an
 **FMC endpoints hit:**
 
 | FMC endpoint | Used by |
-|--------------|---------|
+| --- | --- |
 | `POST /api/fmc_platform/v1/auth/generatetoken` | all (auth), `/v1/fetch/test-connection` |
 | `GET /api/fmc_config/v1/domain/{domain_uuid}/policy/accesspolicies` | `/v1/fetch/policies` |
 | `GET /api/fmc_config/v1/domain/{domain_uuid}/policy/accesspolicies/{policy_id}/accessrules?expanded=true&offset=…&limit=1000` (paginated until `paging.next` is absent) | `/v1/fetch/rules` |
@@ -373,7 +375,7 @@ Settings load via `pydantic-settings` (`app/core/config.py`) from the environmen
 `.env` file. Names and meanings only — never commit values.
 
 | Variable | Meaning |
-|----------|---------|
+| --- | --- |
 | `VLLM_ENDPOINT` | Full URL of the OpenAI-compatible chat-completions endpoint. |
 | `VLLM_MODEL` | Model name sent in each chat-completion payload. |
 | `LLM_AUTH_URL` | Keycloak token endpoint for client-credentials auth. **Required** — startup fails if empty. |

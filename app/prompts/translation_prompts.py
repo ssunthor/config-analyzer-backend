@@ -13,6 +13,16 @@ Source Configuration:
 {source_config}"""
 
 
+TRANSLATE_CHUNK_NOTE = """
+NOTE: The source configuration below is part {part} of {total} of a larger file that was
+split at section boundaries because it exceeds the model context window. Translate ONLY
+the sections in this part, preserving their order. The translated parts will be
+concatenated in order, so do not add introductions, summaries, or category headers that
+would duplicate content from other parts, and do not comment on sections that are not
+present in this part. Skip the vendor/OS identification prose — output only
+configuration commands and configuration comments.
+"""
+
 # Vendor-specific syntax guidance injected into {vendor_specific_rules}.
 # Keys are matched case-insensitively as substrings of the requested target_vendor
 # (the frontend sends e.g. "Juniper Junos", "Palo Alto PAN-OS").

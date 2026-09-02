@@ -64,9 +64,15 @@ framework. Powers the frontend's **Config Analyzer** tab.
 | `files` | file upload, repeatable (`List[UploadFile]`) | yes | One or more raw config files. Decoded as UTF-8 with latin-1 fallback. |
 | `framework` | form string | no (default `"Default Best Practices"`) | Analysis framework name interpolated into the LLM prompt (e.g. CIS, NIST). |
 
-Processing: all files are concatenated (each prefixed with `--- File: <name> ---`),
-truncated to **400,000 characters** if larger, and sent to the vLLM endpoint in a single
-prompt (`temperature=0.1`, `max_tokens=8192`).
+Processing: all files are concatenated (each prefixed with `--- File: <name> ---`).
+Input that fits the model context window (derived from `LLM_NUM_CTX`, minus the output
+and prompt budget — roughly 360k characters at the 128k-token default) is analyzed in a
+single prompt (`temperature=0.1`, `max_tokens=8192`). Larger input is split per file at
+top-level config-section boundaries (FortiOS `config ... end` blocks, Cisco `!`
+separators), the chunks are analyzed concurrently (`CONCURRENT_REQUESTS` at a time), and
+the per-chunk JSON results are merged — line numbers re-offset to the original file,
+issues deduplicated by (file, line, title) and re-numbered — into one report with the
+same response shape. Nothing is truncated.
 
 **Response `200` — success:**
 
@@ -130,13 +136,16 @@ frontend's **Config Translator** tab.
 | `file` | file upload (single `UploadFile`) | yes | Source configuration. UTF-8 with latin-1 fallback. |
 | `target_vendor` | form string | yes | Desired target vendor. |
 
-> Implementation note: `target_vendor` is accepted and passed to the prompt formatter,
-> but the current prompt template (`app/prompts/translation_prompts.py`) is hardcoded
-> for **Cisco ASA → Juniper Junos (SRX) `set` commands** and does not interpolate
-> `target_vendor`. Other targets will still produce Junos output until the prompt is
-> generalized.
+> Vendor-specific syntax guidance is injected per target via
+> `translation_prompts.VENDOR_RULES` (matched case-insensitively by substring);
+> currently only Juniper has tuned rules — other targets get the generic template.
 
-LLM call parameters: `temperature=0.1`, `max_tokens=8192`.
+Processing: input that fits the model context window (roughly half the window in
+characters, since the translated output is about as large as the source) is translated
+in a single call. Larger files are split at top-level config-section boundaries,
+translated concurrently (`CONCURRENT_REQUESTS` at a time), and the translated parts are
+concatenated in source order. LLM call parameters: `temperature=0.1`; `max_tokens` is
+sized dynamically to the context space remaining after the prompt (floor 8192).
 
 **Response `200` — success:**
 
@@ -382,11 +391,11 @@ Settings load via `pydantic-settings` (`app/core/config.py`) from the environmen
 | `LLM_CLIENT_ID` | Keycloak client ID. **Required.** |
 | `LLM_CLIENT_SECRET` | Keycloak client secret. **Required.** |
 | `LLM_CHAT_TIMEOUT` | Per-request LLM timeout in seconds (default 300). |
-| `LLM_NUM_CTX` | Default `max_tokens` when a caller doesn't specify one (default 8192). |
+| `LLM_NUM_CTX` | Model context window in tokens (default 131072, matching the Gemma4-31b deployment's `max_model_len`). Drives the analysis chunking budget; also the default `max_tokens` when a caller doesn't specify one (all current callers do). |
 | `LLM_SSL_VERIFY` | Verify TLS on Keycloak/vLLM calls (default false). |
 | `LLM_ENABLE_THINKING` | If true, sends `chat_template_kwargs: {"enable_thinking": true}` with each LLM request (default false). |
-| `CONCURRENT_REQUESTS` | Declared concurrency limit setting (default 5; not currently referenced by request paths). |
-| `CHUNK_SIZE` | Declared chunking size setting (default 100000; chunking helper exists but the analysis path truncates at 400k chars instead). |
+| `CONCURRENT_REQUESTS` | Max concurrent LLM calls when a large analysis is chunked (default 5). |
+| `CHUNK_SIZE` | Override for the per-chunk character budget in chunked analysis (default 0 = derive from `LLM_NUM_CTX`). |
 | `HOST` / `PORT` | Bind address/port settings (defaults `0.0.0.0` / `8010`). Note: the Dockerfile `CMD` hardcodes `--host 0.0.0.0 --port 8010`, so in-container these env vars are informational. |
 
 No Redis or Kafka — this service is stateless; every request is self-contained.

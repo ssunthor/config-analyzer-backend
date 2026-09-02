@@ -32,6 +32,14 @@ Severity must be one of: "High", "Medium", "Low".
 Output strictly the JSON object. Do not wrap it in markdown block quotes (```json).
 """
 
+CHUNK_CONTEXT_NOTE = """
+NOTE: The configuration below is part {part} of {total} of the file "{filename}".
+It was split at section boundaries because the full file is too large to analyze at once.
+Only report issues visible in this part; other parts are analyzed separately.
+Use "{filename}" as the "file" value, and report "line" numbers relative to the text
+provided below (the first line below is line 1).
+"""
+
 EXTRACT_CONFIG_PROMPT = """You are a network parsing assistant.
 Your ONLY job is to extract all security-relevant configurations from the provided raw text chunk.
 This includes:

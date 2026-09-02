@@ -66,7 +66,7 @@ framework. Powers the frontend's **Config Analyzer** tab.
 
 Processing: all files are concatenated (each prefixed with `--- File: <name> ---`).
 Input that fits the model context window (derived from `LLM_NUM_CTX`, minus the output
-and prompt budget — roughly 750k characters at the 256k-token default) is analyzed in a
+and prompt budget — roughly 360k characters at the 128k-token default) is analyzed in a
 single prompt (`temperature=0.1`, `max_tokens=8192`). Larger input is split per file at
 top-level config-section boundaries (FortiOS `config ... end` blocks, Cisco `!`
 separators), the chunks are analyzed concurrently (`CONCURRENT_REQUESTS` at a time), and
@@ -388,7 +388,7 @@ Settings load via `pydantic-settings` (`app/core/config.py`) from the environmen
 | `LLM_CLIENT_ID` | Keycloak client ID. **Required.** |
 | `LLM_CLIENT_SECRET` | Keycloak client secret. **Required.** |
 | `LLM_CHAT_TIMEOUT` | Per-request LLM timeout in seconds (default 300). |
-| `LLM_NUM_CTX` | Model context window in tokens (default 262144). Drives the analysis chunking budget; also the default `max_tokens` when a caller doesn't specify one (all current callers do). |
+| `LLM_NUM_CTX` | Model context window in tokens (default 131072, matching the Gemma4-31b deployment's `max_model_len`). Drives the analysis chunking budget; also the default `max_tokens` when a caller doesn't specify one (all current callers do). |
 | `LLM_SSL_VERIFY` | Verify TLS on Keycloak/vLLM calls (default false). |
 | `LLM_ENABLE_THINKING` | If true, sends `chat_template_kwargs: {"enable_thinking": true}` with each LLM request (default false). |
 | `CONCURRENT_REQUESTS` | Max concurrent LLM calls when a large analysis is chunked (default 5). |

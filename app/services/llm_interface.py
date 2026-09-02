@@ -184,15 +184,18 @@ class vLLMClient:
                 logger.warning("LLM response contained no choices")
                 return None
             except RequestException as e:
+                body = ""
+                if getattr(e, 'response', None) is not None:
+                    body = f" | response: {e.response.text[:500]}"
                 if attempt < max_retries:
                     sleep_time = 2 ** attempt
                     logger.warning(
-                        f"vLLM request failed (attempt {attempt}/{max_retries}): {e} — "
+                        f"vLLM request failed (attempt {attempt}/{max_retries}): {e}{body} — "
                         f"retrying in {sleep_time}s"
                     )
                     time.sleep(sleep_time)
                 else:
-                    logger.error(f"vLLM request failed after {max_retries} attempts: {e}")
+                    logger.error(f"vLLM request failed after {max_retries} attempts: {e}{body}")
                     return None
 
     async def get_chat_completion_stream(

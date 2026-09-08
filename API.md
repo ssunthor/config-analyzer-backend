@@ -22,6 +22,7 @@ assistant, and live rule ingestion from Cisco Firepower Management Center (FMC).
 | POST | `/v1/configs/analyze` | AI security analysis of uploaded config files (synchronous) |
 | POST | `/v1/configs/analyze/jobs` | Start an analysis as a background job (returns a job id) |
 | GET | `/v1/configs/analyze/jobs/{job_id}` | Poll job progress and fetch the finished result |
+| POST | `/v1/configs/report` | Render a completed analysis into a PDF audit report |
 | POST | `/v1/configs/translate` | AI cross-vendor translation of a config file |
 | POST | `/v1/chat/stream` | SSE streaming network-security chat assistant |
 | POST | `/v1/fetch/policies` | List access-control policies from a firewall manager (Cisco FMC) |
@@ -170,6 +171,47 @@ sized; for chunked inputs it is the chunk count, for single-pass inputs `1`):
 **Error responses:**
 
 - `404` — `{"detail": "Unknown or expired job id"}` (never issued, restarted service, or result older than the one-hour retention)
+
+---
+
+## POST /v1/configs/report
+
+Renders a completed analysis into a downloadable PDF audit report. The frontend posts
+back the issues it parsed from the analysis result; the service makes one LLM call to
+write the executive section (summary, overall rating, recommended actions), then renders
+the PDF with reportlab. If the LLM call fails or returns unparseable JSON, a
+deterministic summary derived from the severity counts is used instead — the download
+never fails for LLM reasons.
+
+**Request:** `application/json`
+
+```json
+{
+  "framework": "PCI-DSS v4.0",
+  "issues": [
+    {
+      "id": "vuln-001",
+      "severity": "High",
+      "title": "Permissive Any-Any Rule Detected",
+      "description": "...",
+      "strategy": "...",
+      "file": "fw01.cfg"
+    }
+  ],
+  "file_metadata": [
+    { "file": "fw01.cfg", "vendor": "Cisco", "os": "IOS", "version": "15.4(3)M1" }
+  ]
+}
+```
+
+All fields are optional (`framework` defaults to `"Default Best Practices"`); issue
+objects may carry extra keys (e.g. `originalCode`/`proposedCode`), which are ignored.
+
+**Response `200`:** `application/pdf` bytes with
+`Content-Disposition: attachment; filename="security-audit-report.pdf"`. The document
+contains the overall rating (grade + 0–100 score), the executive summary, a findings
+overview table, the analyzed-file inventory, the prioritized recommended actions, and a
+detailed findings section (description + remediation per issue).
 
 ---
 

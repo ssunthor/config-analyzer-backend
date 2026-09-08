@@ -19,7 +19,9 @@ assistant, and live rule ingestion from Cisco Firepower Management Center (FMC).
 | Method | Path | Purpose |
 | --- | --- | --- |
 | GET | `/v1/health` | Service liveness + upstream vLLM reachability |
-| POST | `/v1/configs/analyze` | AI security analysis of uploaded config files |
+| POST | `/v1/configs/analyze` | AI security analysis of uploaded config files (synchronous) |
+| POST | `/v1/configs/analyze/jobs` | Start an analysis as a background job (returns a job id) |
+| GET | `/v1/configs/analyze/jobs/{job_id}` | Poll job progress and fetch the finished result |
 | POST | `/v1/configs/translate` | AI cross-vendor translation of a config file |
 | POST | `/v1/chat/stream` | SSE streaming network-security chat assistant |
 | POST | `/v1/fetch/policies` | List access-control policies from a firewall manager (Cisco FMC) |
@@ -121,6 +123,49 @@ callers should parse defensively.
 
 - `400` — `{"detail": "No files provided"}` (empty file list)
 - `422` — FastAPI validation error when the `files` part is missing entirely
+
+This synchronous endpoint holds the HTTP request open for the whole analysis, so a large
+input can outlive proxy timeouts (nginx returns `504`). The frontend uses the job
+endpoints below instead; this one is kept for compatibility and small inputs.
+
+---
+
+## POST /v1/configs/analyze/jobs
+
+Same request shape as `POST /v1/configs/analyze` (`multipart/form-data`: `files`,
+`framework`), but returns immediately after starting the analysis as a background task
+in the service process.
+
+**Response `200`:**
+
+```json
+{ "job_id": "3f2a9c...", "status": "running" }
+```
+
+Poll the job endpoint below for progress and the result. Jobs live in process memory:
+a service restart loses running jobs, and finished results are purged one hour after
+completion.
+
+---
+
+## GET /v1/configs/analyze/jobs/{job_id}
+
+Progress/result poll for a job started via `POST /v1/configs/analyze/jobs`.
+
+**Response `200` — still running** (`progress.total` is `null` until the work has been
+sized; for chunked inputs it is the chunk count, for single-pass inputs `1`):
+
+```json
+{ "job_id": "3f2a9c...", "status": "running", "progress": { "done": 2, "total": 7 } }
+```
+
+**Response `200` — finished:** the same payload with `status` `"completed"` or
+`"error"`, plus the full result of the underlying analysis merged in — `analysis`
+(same string format as the synchronous endpoint) on success, `message` on error.
+
+**Error responses:**
+
+- `404` — `{"detail": "Unknown or expired job id"}` (never issued, restarted service, or result older than the one-hour retention)
 
 ---
 

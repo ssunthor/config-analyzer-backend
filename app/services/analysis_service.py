@@ -105,12 +105,16 @@ def _merge_chunk_results(results, filename_by_index) -> dict:
     return merged
 
 
-async def analyze_configuration_files(files_content: str, framework: str) -> dict:
+async def analyze_configuration_files(files_content: str, framework: str,
+                                      progress_cb=None) -> dict:
     """
     Performs a deep security analysis of configuration files. Inputs that fit
     the model context window are analyzed in a single call; larger inputs are
     split per file at config-section boundaries, analyzed concurrently, and
     the structured results are merged back into one report.
+
+    progress_cb, if given, is called as progress_cb(done, total) whenever a
+    unit of work completes (chunks for large inputs, 1 for a single pass).
     """
     total_start_time = time.time()
     max_chars = _max_input_chars()
@@ -122,10 +126,14 @@ async def analyze_configuration_files(files_content: str, framework: str) -> dic
     try:
         if len(files_content) <= max_chars:
             logger.info("Input fits context window; single analysis pass")
+            if progress_cb:
+                progress_cb(0, 1)
             prompt = analysis_prompts.ANALYZE_CONFIG_PROMPT.format(framework=framework)
             prompt += f"\n\nConfiguration Files to Analyze:\n{files_content}\n"
             response_json = await call_vllm_api(_build_payload(prompt))
             analysis = response_json["choices"][0]["message"]["content"]
+            if progress_cb:
+                progress_cb(1, 1)
         else:
             tasks = []
             filename_by_index = []
@@ -140,7 +148,20 @@ async def analyze_configuration_files(files_content: str, framework: str) -> dic
 
             logger.info(f"Input exceeds context window; analyzing {len(tasks)} chunks "
                         f"(concurrency={settings.CONCURRENT_REQUESTS})")
-            results = await asyncio.gather(*tasks)
+            total = len(tasks)
+            done = 0
+            if progress_cb:
+                progress_cb(0, total)
+
+            async def _tracked(coro):
+                nonlocal done
+                res = await coro
+                done += 1
+                if progress_cb:
+                    progress_cb(done, total)
+                return res
+
+            results = await asyncio.gather(*(_tracked(t) for t in tasks))
             merged = _merge_chunk_results(results, filename_by_index)
             if not merged["file_metadata"] and not merged["issues"]:
                 return {"status": "error",

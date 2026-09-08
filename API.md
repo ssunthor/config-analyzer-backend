@@ -390,7 +390,7 @@ Settings load via `pydantic-settings` (`app/core/config.py`) from the environmen
 | `LLM_AUTH_URL` | Keycloak token endpoint for client-credentials auth. **Required** — startup fails if empty. |
 | `LLM_CLIENT_ID` | Keycloak client ID. **Required.** |
 | `LLM_CLIENT_SECRET` | Keycloak client secret. **Required.** |
-| `LLM_CHAT_TIMEOUT` | Per-request LLM timeout in seconds (default 300). |
+| `LLM_CHAT_TIMEOUT` | Per-request LLM timeout in seconds (default 600). |
 | `LLM_NUM_CTX` | Model context window in tokens (default 131072, matching the Gemma4-31b deployment's `max_model_len`). Drives the analysis chunking budget; also the default `max_tokens` when a caller doesn't specify one (all current callers do). |
 | `LLM_SSL_VERIFY` | Verify TLS on Keycloak/vLLM calls (default false). |
 | `LLM_ENABLE_THINKING` | If true, sends `chat_template_kwargs: {"enable_thinking": true}` with each LLM request (default false). |

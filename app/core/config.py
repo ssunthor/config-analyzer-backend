@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     LLM_CLIENT_SECRET: str = ""
 
     # LLM runtime settings
-    LLM_CHAT_TIMEOUT: int = 300
+    LLM_CHAT_TIMEOUT: int = 600
     LLM_NUM_CTX: int = 131072
     LLM_SSL_VERIFY: bool = False
     LLM_ENABLE_THINKING: bool = False

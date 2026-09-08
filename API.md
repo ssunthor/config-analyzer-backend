@@ -19,7 +19,9 @@ assistant, and live rule ingestion from Cisco Firepower Management Center (FMC).
 | Method | Path | Purpose |
 | --- | --- | --- |
 | GET | `/v1/health` | Service liveness + upstream vLLM reachability |
-| POST | `/v1/configs/analyze` | AI security analysis of uploaded config files |
+| POST | `/v1/configs/analyze` | AI security analysis of uploaded config files (synchronous) |
+| POST | `/v1/configs/analyze/jobs` | Start an analysis as a background job (returns a job id) |
+| GET | `/v1/configs/analyze/jobs/{job_id}` | Poll job progress and fetch the finished result |
 | POST | `/v1/configs/translate` | AI cross-vendor translation of a config file |
 | POST | `/v1/chat/stream` | SSE streaming network-security chat assistant |
 | POST | `/v1/fetch/policies` | List access-control policies from a firewall manager (Cisco FMC) |
@@ -74,6 +76,10 @@ the per-chunk JSON results are merged — line numbers re-offset to the original
 issues deduplicated by (file, line, title) and re-numbered — into one report with the
 same response shape. Nothing is truncated.
 
+Analysis completions are transported as a stream and accumulated server-side: the
+gateway in front of the vLLM endpoint times out responses that send no bytes for
+~5 minutes, and long generations would otherwise 504 upstream.
+
 **Response `200` — success:**
 
 ```json
@@ -121,6 +127,49 @@ callers should parse defensively.
 
 - `400` — `{"detail": "No files provided"}` (empty file list)
 - `422` — FastAPI validation error when the `files` part is missing entirely
+
+This synchronous endpoint holds the HTTP request open for the whole analysis, so a large
+input can outlive proxy timeouts (nginx returns `504`). The frontend uses the job
+endpoints below instead; this one is kept for compatibility and small inputs.
+
+---
+
+## POST /v1/configs/analyze/jobs
+
+Same request shape as `POST /v1/configs/analyze` (`multipart/form-data`: `files`,
+`framework`), but returns immediately after starting the analysis as a background task
+in the service process.
+
+**Response `200`:**
+
+```json
+{ "job_id": "3f2a9c...", "status": "running" }
+```
+
+Poll the job endpoint below for progress and the result. Jobs live in process memory:
+a service restart loses running jobs, and finished results are purged one hour after
+completion.
+
+---
+
+## GET /v1/configs/analyze/jobs/{job_id}
+
+Progress/result poll for a job started via `POST /v1/configs/analyze/jobs`.
+
+**Response `200` — still running** (`progress.total` is `null` until the work has been
+sized; for chunked inputs it is the chunk count, for single-pass inputs `1`):
+
+```json
+{ "job_id": "3f2a9c...", "status": "running", "progress": { "done": 2, "total": 7 } }
+```
+
+**Response `200` — finished:** the same payload with `status` `"completed"` or
+`"error"`, plus the full result of the underlying analysis merged in — `analysis`
+(same string format as the synchronous endpoint) on success, `message` on error.
+
+**Error responses:**
+
+- `404` — `{"detail": "Unknown or expired job id"}` (never issued, restarted service, or result older than the one-hour retention)
 
 ---
 
@@ -390,7 +439,7 @@ Settings load via `pydantic-settings` (`app/core/config.py`) from the environmen
 | `LLM_AUTH_URL` | Keycloak token endpoint for client-credentials auth. **Required** — startup fails if empty. |
 | `LLM_CLIENT_ID` | Keycloak client ID. **Required.** |
 | `LLM_CLIENT_SECRET` | Keycloak client secret. **Required.** |
-| `LLM_CHAT_TIMEOUT` | Per-request LLM timeout in seconds (default 300). |
+| `LLM_CHAT_TIMEOUT` | Per-request LLM timeout in seconds (default 600). |
 | `LLM_NUM_CTX` | Model context window in tokens (default 131072, matching the Gemma4-31b deployment's `max_model_len`). Drives the analysis chunking budget; also the default `max_tokens` when a caller doesn't specify one (all current callers do). |
 | `LLM_SSL_VERIFY` | Verify TLS on Keycloak/vLLM calls (default false). |
 | `LLM_ENABLE_THINKING` | If true, sends `chat_template_kwargs: {"enable_thinking": true}` with each LLM request (default false). |

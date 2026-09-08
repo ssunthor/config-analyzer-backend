@@ -1,8 +1,17 @@
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException
+from fastapi.responses import Response
+from pydantic import BaseModel, Field
 from typing import List
-from app.services import analysis_service, analysis_jobs
+from app.services import analysis_service, analysis_jobs, report_service
 
 router = APIRouter()
+
+
+class ReportRequest(BaseModel):
+    """Analysis results (as parsed by the frontend) to render into a PDF."""
+    framework: str = "Default Best Practices"
+    issues: List[dict] = Field(default_factory=list)
+    file_metadata: List[dict] = Field(default_factory=list)
 
 
 async def _read_files(files: List[UploadFile]) -> str:
@@ -60,3 +69,19 @@ async def get_analysis_job(job_id: str):
     if job is None:
         raise HTTPException(status_code=404, detail="Unknown or expired job id")
     return job
+
+
+@router.post("/report")
+async def generate_report(request: ReportRequest):
+    """
+    Renders a PDF audit report from a completed analysis: an LLM-written
+    executive summary, overall rating, and recommended actions, followed by
+    the detailed findings. Returns the PDF bytes as an attachment.
+    """
+    pdf = await report_service.generate_report(
+        request.issues, request.file_metadata, request.framework)
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": 'attachment; filename="security-audit-report.pdf"'},
+    )

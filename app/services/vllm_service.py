@@ -86,6 +86,44 @@ async def call_vllm_api(payload: Dict) -> Dict:
     return {"choices": [{"message": message}]}
 
 
+async def call_vllm_api_streamed(payload: Dict, max_retries: int = 3) -> Dict:
+    """
+    Same contract as call_vllm_api, but transported over a streaming request
+    and accumulated. The gateway in front of the vLLM endpoint times out
+    responses that send no bytes for ~300s; streaming keeps tokens flowing
+    for the whole generation, so long completions survive it. A stream that
+    fails mid-generation is restarted from scratch (the partial is discarded).
+    """
+    messages = payload.get("messages", [])
+    temperature = payload.get("temperature", 0.2)
+    max_tokens = payload.get("max_tokens")
+
+    last_error = None
+    for attempt in range(1, max_retries + 1):
+        parts = []
+        try:
+            async for chunk in _client.get_chat_completion_stream(
+                    messages, temperature, max_tokens=max_tokens):
+                parts.append(chunk)
+            content = "".join(parts)
+            if not content:
+                raise RuntimeError("vLLM stream produced no content")
+            logger.debug(f"call_vllm_api_streamed: success — content_len={len(content)} chars")
+            return {"choices": [{"message": {"role": "assistant", "content": content}}]}
+        except Exception as e:
+            last_error = e
+            if attempt < max_retries:
+                sleep_time = 2 ** attempt
+                logger.warning(
+                    f"call_vllm_api_streamed failed (attempt {attempt}/{max_retries}, "
+                    f"{len(parts)} chunks received): {e} — retrying in {sleep_time}s"
+                )
+                await asyncio.sleep(sleep_time)
+
+    logger.error(f"call_vllm_api_streamed failed after {max_retries} attempts: {last_error}")
+    raise RuntimeError(f"vLLM streamed call failed after {max_retries} attempts: {last_error}")
+
+
 async def stream_vllm_api(payload: Dict) -> AsyncGenerator[str, None]:
     """
     Streaming LLM call. Yields raw content chunks (strings) for SSE delivery.

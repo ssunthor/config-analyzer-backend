@@ -76,6 +76,10 @@ the per-chunk JSON results are merged — line numbers re-offset to the original
 issues deduplicated by (file, line, title) and re-numbered — into one report with the
 same response shape. Nothing is truncated.
 
+Analysis completions are transported as a stream and accumulated server-side: the
+gateway in front of the vLLM endpoint times out responses that send no bytes for
+~5 minutes, and long generations would otherwise 504 upstream.
+
 **Response `200` — success:**
 
 ```json

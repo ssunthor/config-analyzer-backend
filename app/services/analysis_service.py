@@ -5,7 +5,7 @@ import re
 import time
 import httpx
 from app.core.config import settings
-from app.services.vllm_service import call_vllm_api
+from app.services.vllm_service import call_vllm_api_streamed
 from app.prompts import analysis_prompts
 from app.utils.text_processing import split_concatenated_files, chunk_config_text
 
@@ -58,7 +58,7 @@ async def _analyze_chunk(semaphore: asyncio.Semaphore, framework: str,
     async with semaphore:
         chunk_start = time.time()
         logger.info(f"Analyzing chunk {part}/{total} of '{filename}' ({len(chunk)} chars)")
-        response_json = await call_vllm_api(_build_payload(prompt))
+        response_json = await call_vllm_api_streamed(_build_payload(prompt))
         logger.info(f"Chunk {part}/{total} of '{filename}' done in {time.time() - chunk_start:.2f}s")
     return response_json["choices"][0]["message"]["content"], start_line
 
@@ -130,7 +130,7 @@ async def analyze_configuration_files(files_content: str, framework: str,
                 progress_cb(0, 1)
             prompt = analysis_prompts.ANALYZE_CONFIG_PROMPT.format(framework=framework)
             prompt += f"\n\nConfiguration Files to Analyze:\n{files_content}\n"
-            response_json = await call_vllm_api(_build_payload(prompt))
+            response_json = await call_vllm_api_streamed(_build_payload(prompt))
             analysis = response_json["choices"][0]["message"]["content"]
             if progress_cb:
                 progress_cb(1, 1)

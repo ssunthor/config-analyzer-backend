@@ -10,43 +10,57 @@
 # - "🧹 Refactoring & Chores"
 # ---------------------------------------------------------------------------
 ---
+- version: '0.1.4'
+  date: '2026-09-08'
+  author: 'Scott Chrestman'
+  changes:
+    - category: '✨ New Features & Enhancements'
+      items:
+        - 'Introduced asynchronous analysis jobs with a polling mechanism to handle large configuration sets without proxy timeouts.'
+        - 'Added automated PDF security audit report generation, featuring AI-generated executive summaries, risk ratings, and remediation guidance.'
+        - 'Implemented real-time progress tracking for configuration analysis tasks.'
+    - category: '🚀 Architecture & Infrastructure'
+      items:
+        - 'Implemented a background job management system with automatic TTL-based purging of expired results.'
+        - 'Migrated LLM API interactions to a streaming accumulation pattern to bypass gateway timeouts for long-form content generation.'
+    - category: '🐛 Bug Fixes & Resilience'
+      items:
+        - 'Increased LLM chat timeout to 600 seconds to accommodate complex analysis requests.'
+        - 'Added exponential backoff retry logic to LLM streaming calls to improve service stability.'
+        - 'Implemented a deterministic fallback mechanism for report summaries to guarantee PDF delivery during LLM service interruptions.'
+    - category: '🧹 Refactoring & Chores'
+      items:
+        - 'Added reportlab dependency for PDF document rendering.'
+
+
+- version: '0.1.3'
+  date: '2026-09-02'
+  author: 'Scott Chrestman'
+  changes:
+    - category: '🚀 Architecture & Infrastructure'
+      items:
+        - 'Upgraded the core LLM to Gemma 4 31B and expanded the context window to 131,072 tokens.'
+        - 'Implemented a semantic chunking engine that splits large configuration files at logical section boundaries (e.g., Cisco "!" or FortiOS "config" blocks) to prevent mid-block truncation.'
+        - 'Introduced concurrent processing for analysis and translation services using asyncio semaphores to improve throughput for large datasets.'
+    - category: '✨ New Features & Enhancements'
+      items:
+        - 'Expanded the translation service to support multi-vendor target configurations with a dynamic vendor-specific rule injection system.'
+        - 'Added a chunk-and-merge workflow for security analysis, allowing the system to process files exceeding the model context window while maintaining line-number accuracy.'
+    - category: '🐛 Bug Fixes & Resilience'
+      items:
+        - 'Enhanced LLM interface resilience by suppressing retries on deterministic 4xx client errors.'
+        - 'Improved diagnostic logging in the vLLM client to capture response bodies during API failures.'
+    - category: '🧹 Refactoring & Chores'
+      items:
+        - 'Integrated project-wide linting standards via .markdownlint.json and .yamllint.yml.'
+        - 'Updated core dependencies including FastAPI, Pydantic, and HTTPX to their latest stable versions.'
+
+
 - version: '0.1.2'
   date: '2026-08-18'
   author: 'Martin Kecka'
   changes:
     - category: '🚀 Architecture & Infrastructure'
       items:
-        - 'Optimized container build performance by refining Kaniko caching and snapshotting modes.'
-        - 'Enhanced pipeline stability by increasing Kubernetes ephemeral storage limits and extending security analyzer timeouts.'
-
-
-- version: '0.1.1'
-  date: '2026-06-10'
-  author: 'Scott Chrestman'
-  changes:
-    - category: '🚀 Architecture & Infrastructure'
-      items:
-        - 'Established the core FastAPI backend architecture with a modular service-oriented design.'
-        - 'Implemented containerization via Docker and integrated a GitLab CI/CD pipeline for automated builds.'
-        - 'Integrated vLLM for AI inference with a singleton client and Keycloak-based authentication.'
-        - 'Developed a provider-based abstraction layer to support extensible multi-vendor firewall integrations.'
-    - category: '✨ New Features & Enhancements'
-      items:
-        - 'Added AI-powered security analysis to identify misconfigurations and compliance violations in network configurations.'
-        - 'Implemented cross-vendor configuration translation, specifically supporting Cisco ASA to Juniper Junos.'
-        - 'Introduced a streaming AI chat interface using Server-Sent Events (SSE) for real-time interaction.'
-        - 'Added Cisco Firepower Management Center (FMC) integration for automated policy and rule extraction.'
-        - 'Implemented a rule normalization engine to optimize raw firewall data for LLM context windows.'
-    - category: '🔒 Security & Auth'
-      items:
-        - 'Implemented an AI intent guardrail to prevent the generation of general-purpose source code and malicious exploits.'
-        - 'Integrated Keycloak token management for secure, authenticated access to the LLM inference server.'
-
-
-- version: '0.1.0'
-  date: '2026-03-27'
-  author: 'Franklin Zhang'
-  changes:
-    - category: '🧹 Refactoring & Chores'
-      items:
-        - 'Initialized project documentation with a base README file.'
+        - 'Optimized container build performance and resource utilization through refined Kaniko configuration.'
+        - 'Improved pipeline stability by increasing ephemeral storage limits and timeouts for security and analysis tools.'

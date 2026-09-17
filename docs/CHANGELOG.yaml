@@ -64,3 +64,35 @@
       items:
         - 'Optimized container build performance and resource utilization through refined Kaniko configuration.'
         - 'Improved pipeline stability by increasing ephemeral storage limits and timeouts for security and analysis tools.'
+
+
+- version: '0.1.1'
+  date: '2026-06-10'
+  author: 'Scott Chrestman'
+  changes:
+    - category: '🚀 Architecture & Infrastructure'
+      items:
+        - 'Established the core FastAPI backend architecture with a modular service-oriented design.'
+        - 'Implemented containerization via Docker and integrated a GitLab CI/CD pipeline for automated builds.'
+        - 'Integrated vLLM for AI inference with a singleton client and Keycloak-based authentication.'
+        - 'Developed a provider-based abstraction layer to support extensible multi-vendor firewall integrations.'
+    - category: '✨ New Features & Enhancements'
+      items:
+        - 'Added AI-powered security analysis to identify misconfigurations and compliance violations in network configurations.'
+        - 'Implemented cross-vendor configuration translation, specifically supporting Cisco ASA to Juniper Junos.'
+        - 'Introduced a streaming AI chat interface using Server-Sent Events (SSE) for real-time interaction.'
+        - 'Added Cisco Firepower Management Center (FMC) integration for automated policy and rule extraction.'
+        - 'Implemented a rule normalization engine to optimize raw firewall data for LLM context windows.'
+    - category: '🔒 Security & Auth'
+      items:
+        - 'Implemented an AI intent guardrail to prevent the generation of general-purpose source code and malicious exploits.'
+        - 'Integrated Keycloak token management for secure, authenticated access to the LLM inference server.'
+
+
+- version: '0.1.0'
+  date: '2026-03-27'
+  author: 'Franklin Zhang'
+  changes:
+    - category: '🧹 Refactoring & Chores'
+      items:
+        - 'Initialized project documentation with a base README file.'

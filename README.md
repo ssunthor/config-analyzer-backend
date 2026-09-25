@@ -34,6 +34,7 @@ config-analyzer-backend/
 ## Setup & Local Development
 
 ### Prerequisites
+
 - Python 3.11+
 - Virtual Environment (`venv`)
 
@@ -86,7 +87,7 @@ docker build -t config-analyzer-backend .
 docker run -d -p 8010:8010 --env-file .env config-analyzer-backend
 ```
 
-*Note: For production deployments, it is recommended to use Gunicorn to manage Uvicorn workers. Ensure the deployment manifests or CI/CD pipelines are configured accordingly.*
+_Note: For production deployments, it is recommended to use Gunicorn to manage Uvicorn workers. Ensure the deployment manifests or CI/CD pipelines are configured accordingly._
 
 ## CI/CD Pipeline
 
